@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swing Journal</title>
+<style>
+  :root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --line:#dcdcd5; --card:#fff; --win:#16794c; --loss:#b3261e; --accent:#2a5bd7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161616; --fg:#ececea; --muted:#9a9a94; --line:#333; --card:#1f1f1f; --win:#4cc38a; --loss:#ff7b72; --accent:#7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,sans-serif; }
+  main { max-width:1100px; margin:0 auto; }
+  h1 { font-size:22px; margin:8px 0 16px; }
+  .stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; min-width:120px; }
+  .stat b { display:block; font-size:20px; }
+  .stat span { color:var(--muted); font-size:12px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:16px; }
+  .panel summary { cursor:pointer; font-weight:600; }
+  form.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:12px; }
+  label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:3px; }
+  input, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  textarea { min-height:60px; resize:vertical; }
+  .wide { grid-column:1/-1; }
+  button { font:inherit; padding:7px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:6px; cursor:pointer; }
+  button.link { background:none; color:var(--accent); border:none; padding:0; text-decoration:underline; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  th { color:var(--muted); font-size:12px; font-weight:600; }
+  th:first-child, td:first-child { text-align:left; }
+  .win { color:var(--win); } .loss { color:var(--loss); } .open { color:var(--muted); }
+  #msg { margin:8px 0; min-height:1.4em; color:var(--muted); }
+  .notes { white-space:normal; text-align:left; font-size:13px; color:var(--muted); max-width:420px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Swing Journal</h1>
+  <div class="stats" id="stats"></div>
+  <div id="msg"></div>
+
+  <details class="panel">
+    <summary>Add a trade (plan)</summary>
+    <form class="grid" id="addForm">
+      <label>Symbol<input name="symbol" required></label>
+      <label>Company<input name="companyName"></label>
+      <label>Trade date<input name="tradeDate" type="date" required></label>
+      <label>Entry price<input name="entryPrice" type="number" step="any" min="0" required></label>
+      <label>Quantity<input name="quantity" type="number" step="any" min="0" required></label>
+      <label>Planned stop<input name="plannedStop" type="number" step="any" min="0" required></label>
+      <label>Planned exit<input name="plannedExit" type="number" step="any" min="0" required></label>
+      <label class="wide">Why enter?<textarea name="entryReason"></textarea></label>
+      <label class="wide">Why this stop?<textarea name="stopReason"></textarea></label>
+      <label class="wide">Why this exit?<textarea name="exitReason"></textarea></label>
+      <div class="wide"><button type="submit">Save trade</button></div>
+    </form>
+  </details>
+
+  <details class="panel">
+    <summary>Import from CSV</summary>
+    <p style="color:var(--muted)">Use the CSV exported from your spreadsheet. Re-importing is safe; duplicates are skipped.</p>
+    <input type="file" id="csvFile" accept=".csv,text/csv">
+    <button id="importBtn" type="button">Import</button>
+  </details>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Symbol</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
+        <th>R:R</th><th>Risk %</th><th>Status</th><th>P/L</th><th>R</th><th></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d = 2) => v == null ? '–' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+const say = (t) => { $('msg').textContent = t; };
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.json()).error || ''; } catch (e) {}
+    throw new Error(detail || ('Request failed (' + res.status + ')'));
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function load() {
+  const [trades, s] = await Promise.all([api('/api/trades'), api('/api/stats')]);
+  $('stats').innerHTML = [
+    ['Trades', s.totalTrades], ['Open', s.openTrades], ['Closed', s.closedTrades],
+    ['Win rate', s.winRatePercent == null ? '–' : num(s.winRatePercent, 1) + '%'],
+    ['Total P/L', num(s.totalProfitLoss)], ['Avg R', s.averageR == null ? '–' : num(s.averageR)]
+  ].map(([k, v]) => '<div class="stat"><b>' + esc(v) + '</b><span>' + k + '</span></div>').join('');
+
+  $('rows').innerHTML = trades.map(({trade: t, metrics: m}) => {
+    const cls = m.outcome === 'WIN' ? 'win' : m.outcome === 'LOSS' ? 'loss' : 'open';
+    const status = m.outcome === 'OPEN' ? 'Open' : esc(m.outcome) + (t.exitType ? ' (' + esc(t.exitType) + ')' : '');
+    const title = [t.entryReason && 'Entry: ' + t.entryReason, t.stopReason && 'Stop: ' + t.stopReason,
+                   t.exitReason && 'Exit: ' + t.exitReason, t.lesson && 'Lesson: ' + t.lesson].filter(Boolean).join('\n');
+    return '<tr title="' + esc(title) + '"><td>' + esc(t.symbol) + (t.companyName ? ' <span class="open">' + esc(t.companyName) + '</span>' : '') + '</td>'
+      + '<td>' + esc(t.tradeDate) + '</td><td>' + num(t.entryPrice) + '</td><td>' + num(t.quantity, 4).replace(/\.?0+$/, '') + '</td>'
+      + '<td>' + num(m.amountInvested) + '</td><td>' + num(t.plannedStop) + '</td><td>' + num(t.plannedExit) + '</td>'
+      + '<td>' + num(m.rewardRisk) + '</td><td>' + num(m.riskPercent, 1) + '</td>'
+      + '<td class="' + cls + '">' + status + '</td><td class="' + cls + '">' + num(m.profitLoss) + '</td><td>' + num(m.rMultiple) + '</td>'
+      + '<td>' + (t.exitPrice == null ? '<button class="link" data-close="' + t.id + '">Close</button>' : '') + '</td></tr>';
+  }).join('') || '<tr><td colspan="13" class="open">No trades yet. Add one or import your CSV.</td></tr>';
+}
+
+$('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target).entries());
+  ['entryReason', 'stopReason', 'exitReason', 'companyName'].forEach(k => { if (!f[k]) f[k] = null; });
+  try {
+    await api('/api/trades', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(f)});
+    e.target.reset(); say('Trade saved.'); await load();
+  } catch (err) { say(err.message); }
+});
+
+$('importBtn').addEventListener('click', async () => {
+  const file = $('csvFile').files[0];
+  if (!file) { say('Choose a CSV file first.'); return; }
+  const body = new FormData(); body.append('file', file);
+  try {
+    const r = await api('/api/import', {method: 'POST', body});
+    say('Imported ' + r.imported + ', skipped ' + r.skippedDuplicates + ' duplicates' + (r.errors.length ? '. Problems: ' + r.errors.join('; ') : '.'));
+    await load();
+  } catch (err) { say(err.message); }
+});
+
+$('rows').addEventListener('click', async (e) => {
+  const id = e.target.dataset.close;
+  if (!id) return;
+  const price = prompt('Exit price?');
+  if (!price) return;
+  const date = prompt('Exit date (YYYY-MM-DD)?', new Date().toISOString().slice(0, 10));
+  if (!date) return;
+  const lesson = prompt('Lesson learned (optional)?') || null;
+  try {
+    await api('/api/trades/' + id + '/close', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({exitPrice: price, exitDate: date, lesson})});
+    say('Trade closed.'); await load();
+  } catch (err) { say(err.message); }
+});
+
+load().catch(err => say(err.message));
+</script>
+</body>
+</html>
