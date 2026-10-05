@@ -35,6 +35,7 @@
   th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th { color:var(--muted); font-size:12px; font-weight:600; }
   th:first-child, td:first-child, th.l, td.l { text-align:left; }
+  th.actions, td.actions { position:sticky; left:0; background:var(--card); z-index:1; }
   .win { color:var(--win); } .loss { color:var(--loss); } .muted { color:var(--muted); }
   .badge { display:inline-block; padding:1px 8px; border-radius:999px; border:1px solid var(--line); font-size:12px; }
   .badge.PLANNED { color:var(--muted); } .badge.EXECUTED { color:var(--accent); border-color:var(--accent); } .badge.CLOSED { color:var(--fg); }
@@ -90,8 +91,8 @@
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th>Symbol</th><th class="l">Phase</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
-        <th>R:R</th><th>Risk %</th><th class="l">Result</th><th>P/L</th><th>R</th><th class="l">Actions</th>
+        <th class="l actions">Actions</th><th class="l">Symbol</th><th class="l">Phase</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
+        <th>R:R</th><th>Risk %</th><th class="l">Result</th><th>P/L</th><th>R</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -137,14 +138,15 @@ async function load() {
       + (m.status === 'PLANNED' ? '<button class="link" data-act="execute" data-id="' + t.id + '">Execute</button>' : '')
       + (m.status === 'EXECUTED' ? '<button class="link" data-act="close" data-id="' + t.id + '">Close</button>' : '')
       + '<button class="link danger" data-act="delete" data-id="' + t.id + '">Delete</button>';
-    return '<tr title="' + esc(title) + '"><td>' + esc(t.symbol) + (t.companyName ? ' <span class="muted">' + esc(t.companyName) + '</span>' : '') + '</td>'
+    return '<tr title="' + esc(title) + '"><td class="l actions">' + actions + '</td>'
+      + '<td class="l"><button class="link" data-act="edit" data-id="' + t.id + '">' + esc(t.symbol) + '</button>' + (t.companyName ? ' <span class="muted">' + esc(t.companyName) + '</span>' : '') + '</td>'
       + '<td class="l"><span class="badge ' + esc(m.status) + '">' + esc(m.status.charAt(0) + m.status.slice(1).toLowerCase()) + '</span></td>'
       + '<td>' + (t.tradeDate ? esc(t.tradeDate) : '–') + '</td><td>' + num(t.entryPrice) + '</td>'
       + '<td>' + (t.quantity == null ? '–' : num(t.quantity, 4).replace(/\.?0+$/, '')) + '</td>'
       + '<td>' + num(m.amountInvested) + '</td><td>' + num(t.plannedStop) + '</td><td>' + num(t.plannedExit) + '</td>'
       + '<td>' + num(m.rewardRisk) + '</td><td>' + num(m.riskPercent, 1) + '</td>'
       + '<td class="l ' + cls + '">' + result + '</td><td class="' + cls + '">' + num(m.profitLoss) + '</td><td>' + num(m.rMultiple) + '</td>'
-      + '<td class="l">' + actions + '</td></tr>';
+      + '</tr>';
   }).join('') || '<tr><td colspan="14" class="muted">No trades yet. Plan one above or import your CSV.</td></tr>';
 }
 
