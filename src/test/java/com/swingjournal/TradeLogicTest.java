@@ -26,7 +26,7 @@ class TradeLogicTest {
 
     private static Trade planned() {
         return new Trade(null, "TT", null, null, new BigDecimal("331.85"), null, null,
-                new BigDecimal("318.75"), null, new BigDecimal("358.86"), null, null, null, null, null);
+                new BigDecimal("318.75"), null, new BigDecimal("358.86"), null, null, null, null, null, null, null);
     }
 
     @Test

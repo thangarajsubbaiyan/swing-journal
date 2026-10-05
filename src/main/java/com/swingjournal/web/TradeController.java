@@ -45,7 +45,7 @@ public class TradeController {
     public record TradeRequest(String symbol, String companyName, LocalDate tradeDate, BigDecimal entryPrice,
                                BigDecimal quantity, String entryReason, BigDecimal plannedStop, String stopReason,
                                BigDecimal plannedExit, String exitReason, BigDecimal exitPrice, LocalDate exitDate,
-                               ExitType exitType, String lesson) {
+                               ExitType exitType, String lesson, Long setupId, String checklistDone) {
     }
 
     /** Phase 2: the plan was acted on. entryPrice is the actual fill; omit it to keep the planned one. */
@@ -206,7 +206,7 @@ public class TradeController {
                 blankToNull(r.companyName()), r.tradeDate(), r.entryPrice(), r.quantity(),
                 blankToNull(r.entryReason()), r.plannedStop(), blankToNull(r.stopReason()),
                 r.plannedExit(), blankToNull(r.exitReason()), r.exitPrice(), r.exitDate(), r.exitType(),
-                blankToNull(r.lesson()));
+                blankToNull(r.lesson()), r.setupId(), blankToNull(r.checklistDone()));
     }
 
     private static TradeView view(Trade t) {

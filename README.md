@@ -17,6 +17,16 @@ Requires JDK 21+ and Maven.
 
 Open http://localhost:8080
 
+## Setups
+
+The **Setups library** is your chart playbook. It starts with four cards (Channel up, Ascending triangle,
+Wedge down, Double support), each with what it is, how to trade it, a checklist and what breaks it.
+The starter text is general education: edit it to match how you trade, or add your own setups.
+
+Pick a setup in the Plan section of a trade to see its card and tick its checklist. The ticks are saved with the
+trade, and the table shows how many were ticked (for example `Channel up 4/5`). Deleting a setup keeps your trades
+but removes their link to it.
+
 ## Where the data lives
 
 A SQLite file at `~/swing-journal/journal.db`, outside the project, so rebuilding never touches it.
@@ -34,10 +44,10 @@ Everything else is optional; a row without a trade date or quantity is imported 
 duplicate Strategy column are ignored because the app recalculates them. Re-importing skips duplicates
 (same symbol, date and entry price).
 
-## Upgrading from 0.1
+## Upgrading from earlier versions
 
-The first start of this version rebuilds the `trade` table so trade date and quantity can be empty.
-All existing rows are kept (the change is all-or-nothing). Copy `~/swing-journal/journal.db` somewhere first
+The first start of a newer version upgrades the database in place: it lets trade date and quantity be empty
+(rebuilding the `trade` table; all rows are kept, all-or-nothing) and adds the setup columns. Copy `~/swing-journal/journal.db` somewhere first
 if you want a backup.
 
 ## Scope

@@ -110,7 +110,7 @@ public final class TradeCsvImporter {
                 plannedExit,
                 text(row, col, "exit price strategy"),
                 exitPrice, exitDate, exitType,
-                text(row, col, "lesson learned"));
+                text(row, col, "lesson learned"), null, null);
     }
 
     private static String normalize(String header) {

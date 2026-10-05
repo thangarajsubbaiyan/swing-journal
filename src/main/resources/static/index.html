@@ -11,7 +11,7 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,sans-serif; }
-  main { max-width:1200px; margin:0 auto; }
+  main { max-width:1280px; margin:0 auto; }
   h1 { font-size:22px; margin:8px 0 16px; }
   h3 { margin:14px 0 0; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
   .stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
@@ -34,12 +34,19 @@
   table { border-collapse:collapse; width:100%; background:var(--card); border:1px solid var(--line); }
   th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th { color:var(--muted); font-size:12px; font-weight:600; }
-  th:first-child, td:first-child, th.l, td.l { text-align:left; }
+  th.l, td.l { text-align:left; }
   th.actions, td.actions { position:sticky; left:0; background:var(--card); z-index:1; }
   .win { color:var(--win); } .loss { color:var(--loss); } .muted { color:var(--muted); }
   .badge { display:inline-block; padding:1px 8px; border-radius:999px; border:1px solid var(--line); font-size:12px; }
   .badge.PLANNED { color:var(--muted); } .badge.EXECUTED { color:var(--accent); border-color:var(--accent); } .badge.CLOSED { color:var(--fg); }
   #msg { margin:8px 0; min-height:1.4em; color:var(--muted); }
+  .setupcard { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--bg); font-size:14px; }
+  .setupcard p { margin:6px 0; }
+  .setupcard b { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); display:block; margin-top:8px; }
+  .check { flex-direction:row; align-items:center; gap:8px; font-size:14px; color:var(--fg); }
+  .setuprow { border-bottom:1px solid var(--line); padding:8px 0; }
+  .setuprow:last-child { border-bottom:none; }
+  .setuprow summary { font-weight:600; }
 </style>
 </head>
 <body>
@@ -54,6 +61,8 @@
       <h3 class="wide">1 · Plan</h3>
       <label>Symbol<input name="symbol" required></label>
       <label>Company<input name="companyName"></label>
+      <label>Setup<select name="setupId" id="setupSelect"><option value="">None</option></select></label>
+      <div class="wide" id="setupInfo"></div>
       <label>Entry price<input name="entryPrice" type="number" step="any" min="0" required></label>
       <label>Stop<input name="plannedStop" type="number" step="any" min="0" required></label>
       <label>Target<input name="plannedExit" type="number" step="any" min="0" required></label>
@@ -81,6 +90,25 @@
     </form>
   </details>
 
+  <details class="panel" id="setupsPanel">
+    <summary>Setups library</summary>
+    <p class="hint" style="margin:8px 0">Your playbook. The starter text is general education: edit it to match how you actually trade.
+      Pick a setup on a trade to see its card and tick its checklist.</p>
+    <div id="setupList"></div>
+    <form class="grid" id="setupForm">
+      <h3 class="wide" id="setupFormTitle">Add a setup</h3>
+      <label>Name<input name="name" required></label>
+      <label class="wide">What it is and what it tells you<textarea name="description"></textarea></label>
+      <label class="wide">How to trade it (entry, stop, target)<textarea name="tradingNotes"></textarea></label>
+      <label class="wide">Checklist (one item per line)<textarea name="checklist" rows="5"></textarea></label>
+      <label class="wide">What breaks it / warnings<textarea name="warnings"></textarea></label>
+      <div class="wide">
+        <button type="submit" id="setupSaveBtn">Save setup</button>
+        <button type="button" class="secondary" id="setupCancelBtn">Clear</button>
+      </div>
+    </form>
+  </details>
+
   <details class="panel">
     <summary>Import from CSV</summary>
     <p class="hint" style="margin:8px 0">Use the CSV exported from your spreadsheet. Re-importing is safe; duplicates are skipped.</p>
@@ -91,7 +119,7 @@
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th class="l actions">Actions</th><th class="l">Symbol</th><th class="l">Phase</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
+        <th class="l actions">Actions</th><th class="l">Symbol</th><th class="l">Setup</th><th class="l">Phase</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
         <th>R:R</th><th>Risk %</th><th class="l">Result</th><th>P/L</th><th>R</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -101,12 +129,17 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const multi = (s) => esc(s).replace(/\n/g, '<br>');
 const num = (v, d = 2) => v == null ? '–' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
 const say = (t) => { $('msg').textContent = t; };
-const FIELDS = ['symbol','companyName','entryPrice','plannedStop','plannedExit','entryReason','stopReason','exitReason',
+const lines = (s) => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
+const FIELDS = ['symbol','companyName','setupId','entryPrice','plannedStop','plannedExit','entryReason','stopReason','exitReason',
                 'tradeDate','quantity','exitPrice','exitDate','exitType','lesson'];
+const SETUP_FIELDS = ['name','description','tradingNotes','checklist','warnings'];
 let trades = [];
+let setups = [];
 let editingId = null;
+let editingSetupId = null;
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -120,6 +153,86 @@ async function api(path, options) {
 }
 const post = (path, body, method = 'POST') => api(path, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
 
+/* ---------- setups ---------- */
+async function loadSetups() {
+  setups = await api('/api/setups');
+  const current = $('setupSelect').value;
+  $('setupSelect').innerHTML = '<option value="">None</option>'
+    + setups.map(s => '<option value="' + s.id + '">' + esc(s.name) + '</option>').join('');
+  $('setupSelect').value = current;
+  $('setupList').innerHTML = setups.map(s =>
+    '<details class="setuprow"><summary>' + esc(s.name) + '</summary>'
+    + '<div class="setupcard">' + cardHtml(s) + '</div>'
+    + '<p><button class="link" data-sact="edit" data-id="' + s.id + '">Edit</button>'
+    + '<button class="link danger" data-sact="delete" data-id="' + s.id + '">Delete</button></p></details>'
+  ).join('') || '<p class="muted">No setups yet. Add one below.</p>';
+}
+
+function cardHtml(s) {
+  const items = lines(s.checklist);
+  return (s.description ? '<p>' + multi(s.description) + '</p>' : '')
+    + (s.tradingNotes ? '<b>How to trade it</b><p>' + multi(s.tradingNotes) + '</p>' : '')
+    + (items.length ? '<b>Checklist</b><ul>' + items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>' : '')
+    + (s.warnings ? '<b>What breaks it</b><p>' + multi(s.warnings) + '</p>' : '');
+}
+
+/* Shows the card and the tick boxes for the chosen setup inside the trade form. */
+function renderSetupInfo(setupId, doneText) {
+  const s = setups.find(x => String(x.id) === String(setupId));
+  if (!s) { $('setupInfo').innerHTML = ''; return; }
+  const done = new Set(lines(doneText));
+  const boxes = lines(s.checklist).map(i =>
+    '<label class="check"><input type="checkbox" value="' + esc(i) + '"' + (done.has(i) ? ' checked' : '') + '> ' + esc(i) + '</label>').join('');
+  $('setupInfo').innerHTML = '<div class="setupcard"><details><summary>About ' + esc(s.name) + '</summary>' + cardHtml(s) + '</details>'
+    + (boxes ? '<b>Checklist for this trade</b>' + boxes : '') + '</div>';
+}
+const tickedChecklist = () =>
+  [...document.querySelectorAll('#setupInfo input[type=checkbox]:checked')].map(i => i.value).join('\n') || null;
+
+$('setupSelect').addEventListener('change', (e) => renderSetupInfo(e.target.value, ''));
+
+function resetSetupForm() {
+  editingSetupId = null;
+  $('setupForm').reset();
+  $('setupFormTitle').textContent = 'Add a setup';
+  $('setupSaveBtn').textContent = 'Save setup';
+}
+$('setupCancelBtn').addEventListener('click', resetSetupForm);
+
+$('setupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {};
+  SETUP_FIELDS.forEach(k => { const v = e.target.elements[k].value.trim(); body[k] = v === '' ? null : v; });
+  try {
+    if (editingSetupId == null) await post('/api/setups', body);
+    else await post('/api/setups/' + editingSetupId, body, 'PUT');
+    say('Setup saved.'); resetSetupForm(); await loadSetups(); await load();
+  } catch (err) { say(err.message); }
+});
+
+$('setupList').addEventListener('click', async (e) => {
+  const act = e.target.dataset.sact;
+  if (!act) return;
+  const id = Number(e.target.dataset.id);
+  const s = setups.find(x => x.id === id);
+  if (!s) return;
+  try {
+    if (act === 'edit') {
+      editingSetupId = id;
+      SETUP_FIELDS.forEach(k => { $('setupForm').elements[k].value = s[k] ?? ''; });
+      $('setupFormTitle').textContent = 'Edit setup: ' + s.name;
+      $('setupSaveBtn').textContent = 'Save changes';
+      $('setupForm').scrollIntoView({behavior: 'smooth', block: 'center'});
+    } else if (act === 'delete') {
+      if (!confirm('Delete the setup "' + s.name + '"? Trades keep their data but lose the link to it.')) return;
+      await api('/api/setups/' + id, {method: 'DELETE'});
+      if (editingSetupId === id) resetSetupForm();
+      say('Setup deleted.'); await loadSetups(); await load();
+    }
+  } catch (err) { say(err.message); }
+});
+
+/* ---------- trades ---------- */
 async function load() {
   const [list, s] = await Promise.all([api('/api/trades'), api('/api/stats')]);
   trades = list;
@@ -134,12 +247,21 @@ async function load() {
     const result = m.status === 'CLOSED' ? esc(m.outcome) + (t.exitType ? ' (' + esc(t.exitType) + ')' : '') : '–';
     const title = [t.entryReason && 'Entry: ' + t.entryReason, t.stopReason && 'Stop: ' + t.stopReason,
                    t.exitReason && 'Target: ' + t.exitReason, t.lesson && 'Lesson: ' + t.lesson].filter(Boolean).join('\n');
+    const setup = setups.find(x => x.id === t.setupId);
+    let setupCell = '<span class="muted">–</span>';
+    if (setup) {
+      const total = lines(setup.checklist);
+      const done = new Set(lines(t.checklistDone));
+      const ticked = total.filter(i => done.has(i)).length;
+      setupCell = esc(setup.name) + (total.length ? ' <span class="muted">' + ticked + '/' + total.length + '</span>' : '');
+    }
     const actions = '<button class="link" data-act="edit" data-id="' + t.id + '">Edit</button>'
       + (m.status === 'PLANNED' ? '<button class="link" data-act="execute" data-id="' + t.id + '">Execute</button>' : '')
       + (m.status === 'EXECUTED' ? '<button class="link" data-act="close" data-id="' + t.id + '">Close</button>' : '')
       + '<button class="link danger" data-act="delete" data-id="' + t.id + '">Delete</button>';
     return '<tr title="' + esc(title) + '"><td class="l actions">' + actions + '</td>'
       + '<td class="l"><button class="link" data-act="edit" data-id="' + t.id + '">' + esc(t.symbol) + '</button>' + (t.companyName ? ' <span class="muted">' + esc(t.companyName) + '</span>' : '') + '</td>'
+      + '<td class="l">' + setupCell + '</td>'
       + '<td class="l"><span class="badge ' + esc(m.status) + '">' + esc(m.status.charAt(0) + m.status.slice(1).toLowerCase()) + '</span></td>'
       + '<td>' + (t.tradeDate ? esc(t.tradeDate) : '–') + '</td><td>' + num(t.entryPrice) + '</td>'
       + '<td>' + (t.quantity == null ? '–' : num(t.quantity, 4).replace(/\.?0+$/, '')) + '</td>'
@@ -147,12 +269,13 @@ async function load() {
       + '<td>' + num(m.rewardRisk) + '</td><td>' + num(m.riskPercent, 1) + '</td>'
       + '<td class="l ' + cls + '">' + result + '</td><td class="' + cls + '">' + num(m.profitLoss) + '</td><td>' + num(m.rMultiple) + '</td>'
       + '</tr>';
-  }).join('') || '<tr><td colspan="14" class="muted">No trades yet. Plan one above or import your CSV.</td></tr>';
+  }).join('') || '<tr><td colspan="15" class="muted">No trades yet. Plan one above or import your CSV.</td></tr>';
 }
 
 function resetForm() {
   editingId = null;
   $('tradeForm').reset();
+  renderSetupInfo(null);
   $('formTitle').textContent = 'Add a trade';
   $('saveBtn').textContent = 'Save trade';
 }
@@ -163,6 +286,7 @@ function startEdit(id) {
   editingId = id;
   const f = $('tradeForm');
   FIELDS.forEach(k => { f.elements[k].value = t[k] ?? ''; });
+  renderSetupInfo(t.setupId, t.checklistDone);
   $('formTitle').textContent = 'Edit trade: ' + t.symbol;
   $('saveBtn').textContent = 'Save changes';
   $('formPanel').open = true;
@@ -173,6 +297,7 @@ $('tradeForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const body = {};
   FIELDS.forEach(k => { const v = e.target.elements[k].value.trim(); body[k] = v === '' ? null : v; });
+  body.checklistDone = body.setupId ? tickedChecklist() : null;
   try {
     if (editingId == null) await post('/api/trades', body);
     else await post('/api/trades/' + editingId, body, 'PUT');
@@ -224,7 +349,7 @@ $('rows').addEventListener('click', async (e) => {
   } catch (err) { say(err.message); }
 });
 
-load().catch(err => say(err.message));
+loadSetups().then(load).catch(err => say(err.message));
 </script>
 </body>
 </html>

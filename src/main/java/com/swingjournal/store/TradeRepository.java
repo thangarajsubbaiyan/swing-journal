@@ -50,7 +50,9 @@ public class TradeRepository {
                 exit_price    TEXT,
                 exit_date     TEXT,
                 exit_type     TEXT,
-                lesson        TEXT
+                lesson        TEXT,
+                setup_id      INTEGER,
+                checklist_done TEXT
             )""".formatted(name);
     }
 
@@ -60,15 +62,18 @@ public class TradeRepository {
 
     private static final String INSERT = """
             INSERT OR IGNORE INTO trade (symbol, company_name, trade_date, entry_price, quantity, entry_reason,
-                planned_stop, stop_reason, planned_exit, exit_reason, exit_price, exit_date, exit_type, lesson)
+                planned_stop, stop_reason, planned_exit, exit_reason, exit_price, exit_date, exit_type, lesson,
+                setup_id, checklist_done)
             VALUES (:symbol, :company, :tradeDate, :entry, :qty, :entryReason,
-                :stop, :stopReason, :target, :exitReason, :exitPrice, :exitDate, :exitType, :lesson)""";
+                :stop, :stopReason, :target, :exitReason, :exitPrice, :exitDate, :exitType, :lesson,
+                :setupId, :checklist)""";
 
     private static final String UPDATE = """
             UPDATE trade SET symbol = :symbol, company_name = :company, trade_date = :tradeDate,
                 entry_price = :entry, quantity = :qty, entry_reason = :entryReason, planned_stop = :stop,
                 stop_reason = :stopReason, planned_exit = :target, exit_reason = :exitReason,
-                exit_price = :exitPrice, exit_date = :exitDate, exit_type = :exitType, lesson = :lesson
+                exit_price = :exitPrice, exit_date = :exitDate, exit_type = :exitType, lesson = :lesson,
+                setup_id = :setupId, checklist_done = :checklist
             WHERE id = :id""";
 
     private final JdbcClient jdbc;
@@ -85,7 +90,18 @@ public class TradeRepository {
         if (tradeDateIsRequired()) {
             migrateToOptionalDateAndQuantity();
         }
+        // Databases from earlier versions don't have the setup columns yet.
+        ensureColumn("setup_id", "INTEGER");
+        ensureColumn("checklist_done", "TEXT");
         jdbc.sql(UNIQUE_INDEX).update();
+    }
+
+    private void ensureColumn(String name, String type) {
+        int found = jdbc.sql("SELECT COUNT(*) FROM pragma_table_info('trade') WHERE name = :n")
+                .param("n", name).query(Integer.class).single();
+        if (found == 0) {
+            jdbc.sql("ALTER TABLE trade ADD COLUMN " + name + " " + type).update();
+        }
     }
 
     /** Version 0.1 of the app created trade_date and quantity as NOT NULL. */
@@ -158,7 +174,9 @@ public class TradeRepository {
                 .param("exitPrice", text(t.exitPrice()))
                 .param("exitDate", text(t.exitDate()))
                 .param("exitType", t.exitType() == null ? null : t.exitType().name())
-                .param("lesson", t.lesson());
+                .param("lesson", t.lesson())
+                .param("setupId", t.setupId())
+                .param("checklist", t.checklistDone());
     }
 
     private static String text(BigDecimal v) {
@@ -185,7 +203,14 @@ public class TradeRepository {
                 decimal(rs.getString("exit_price")),
                 date(rs.getString("exit_date")),
                 rs.getString("exit_type") == null ? null : ExitType.valueOf(rs.getString("exit_type")),
-                rs.getString("lesson"));
+                rs.getString("lesson"),
+                longOrNull(rs, "setup_id"),
+                rs.getString("checklist_done"));
+    }
+
+    private static Long longOrNull(ResultSet rs, String column) throws SQLException {
+        long v = rs.getLong(column);
+        return rs.wasNull() ? null : v;
     }
 
     private static BigDecimal decimal(String s) {
