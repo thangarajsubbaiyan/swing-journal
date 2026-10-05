@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import com.swingjournal.csv.TradeCsvImporter;
 import com.swingjournal.domain.ExitType;
 import com.swingjournal.domain.Outcome;
+import com.swingjournal.domain.PositionEstimate;
 import com.swingjournal.domain.Status;
 import com.swingjournal.domain.Trade;
 import com.swingjournal.domain.TradeMetrics;
@@ -106,5 +107,42 @@ class TradeLogicTest {
                 + "BRK-B,13/45/2024,10,1,9,12\nBRK-B,1/2/2024,10,1,9,12\n");
         assertEquals(1, bad.errors().size());
         assertEquals("BRK-B", bad.trades().get(0).symbol());
+    }
+    @Test
+    void estimatesMaxLossAndProfitForGivenCapital() {
+        PositionEstimate e = PositionEstimate.of(new BigDecimal("100"), new BigDecimal("95"), new BigDecimal("115"),
+                new BigDecimal("10000"), false);
+        assertEquals(new BigDecimal("100"), e.quantity());
+        assertEquals(new BigDecimal("500.00"), e.maxLoss());
+        assertEquals(new BigDecimal("5.00"), e.maxLossPercentOfCapital());
+        assertEquals(new BigDecimal("1500.00"), e.maxProfit());
+        assertEquals(new BigDecimal("3.00"), e.rewardRisk());
+        assertEquals(new BigDecimal("0.00"), e.cashLeft());
+    }
+
+    @Test
+    void estimateRoundsDownToWholeSharesUnlessFractional() {
+        BigDecimal entry = new BigDecimal("331.85");
+        BigDecimal stop = new BigDecimal("318.75");
+        BigDecimal target = new BigDecimal("358.86");
+        PositionEstimate whole = PositionEstimate.of(entry, stop, target, new BigDecimal("1000"), false);
+        assertEquals(new BigDecimal("3"), whole.quantity());
+        assertEquals(new BigDecimal("995.55"), whole.amountInvested());
+        assertEquals(new BigDecimal("4.45"), whole.cashLeft());
+        assertEquals(new BigDecimal("39.30"), whole.maxLoss());
+        assertEquals(new BigDecimal("81.03"), whole.maxProfit());
+        assertEquals(new BigDecimal("2.06"), whole.rewardRisk());
+
+        PositionEstimate frac = PositionEstimate.of(entry, stop, target, new BigDecimal("1000"), true);
+        assertEquals(new BigDecimal("3.0134"), frac.quantity());
+    }
+
+    @Test
+    void estimateRejectsBadInputs() {
+        BigDecimal ten = BigDecimal.TEN;
+        assertThrows(IllegalArgumentException.class, () -> PositionEstimate.of(ten, new BigDecimal("11"), new BigDecimal("12"), ten, true));
+        assertThrows(IllegalArgumentException.class, () -> PositionEstimate.of(ten, new BigDecimal("9"), new BigDecimal("9.5"), ten, true));
+        assertThrows(IllegalArgumentException.class, () -> PositionEstimate.of(ten, new BigDecimal("9"), new BigDecimal("12"), BigDecimal.ONE, false));
+        assertThrows(IllegalArgumentException.class, () -> PositionEstimate.of(ten, new BigDecimal("9"), new BigDecimal("12"), BigDecimal.ZERO, false));
     }
 }

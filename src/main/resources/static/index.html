@@ -44,6 +44,10 @@
   .setupcard p { margin:6px 0; }
   .setupcard b { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); display:block; margin-top:8px; }
   .check { flex-direction:row; align-items:center; gap:8px; font-size:14px; color:var(--fg); }
+  .est { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; }
+  .est div { border:1px solid var(--line); border-radius:6px; padding:6px 10px; background:var(--card); }
+  .est span { display:block; font-size:12px; color:var(--muted); }
+  .est strong { font-size:16px; }
   .setuprow { border-bottom:1px solid var(--line); padding:8px 0; }
   .setuprow:last-child { border-bottom:none; }
   .setuprow summary { font-weight:600; }
@@ -66,6 +70,16 @@
       <label>Entry price<input name="entryPrice" type="number" step="any" min="0" required></label>
       <label>Stop<input name="plannedStop" type="number" step="any" min="0" required></label>
       <label>Target<input name="plannedExit" type="number" step="any" min="0" required></label>
+      <div class="wide setupcard" id="estimateBox">
+        <b style="margin-top:0">Estimate: how much could I lose or make?</b>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:8px 0">
+          <label>Capital to use ($)<input id="capital" type="number" step="any" min="0"></label>
+          <label class="check"><input type="checkbox" id="fractional"> Allow fractional shares</label>
+          <button type="button" class="secondary" id="useQty">Use this quantity</button>
+        </div>
+        <div id="estimate"></div>
+        <p class="hint" style="margin-top:8px">Uses the entry, stop and target above. Max loss assumes your stop fills exactly at the stop price; gaps or fast moves can make the real loss bigger. Fees are not included.</p>
+      </div>
       <label class="wide">Why enter?<textarea name="entryReason"></textarea></label>
       <label class="wide">Why this stop?<textarea name="stopReason"></textarea></label>
       <label class="wide">Why this target?<textarea name="exitReason"></textarea></label>
@@ -232,6 +246,59 @@ $('setupList').addEventListener('click', async (e) => {
   } catch (err) { say(err.message); }
 });
 
+/* ---------- estimate ---------- */
+let estimateQty = null;
+let estimateTimer = null;
+let estimateSeq = 0;
+const money = (v) => '$' + num(v);
+
+function scheduleEstimate() { clearTimeout(estimateTimer); estimateTimer = setTimeout(runEstimate, 250); }
+
+async function runEstimate() {
+  const f = $('tradeForm').elements;
+  const entry = f.entryPrice.value, stop = f.plannedStop.value, target = f.plannedExit.value, capital = $('capital').value;
+  const box = $('estimate');
+  if (!entry || !stop || !target || !capital) {
+    estimateQty = null;
+    box.innerHTML = '<p class="hint">Enter the entry, stop, target and your capital to see the estimate.</p>';
+    return;
+  }
+  const mine = ++estimateSeq;
+  try {
+    const q = new URLSearchParams({entry, stop, target, capital, fractional: $('fractional').checked});
+    const e = await api('/api/estimate?' + q);
+    if (mine !== estimateSeq) return;
+    estimateQty = e.quantity;
+    const cell = (label, value, cls) => '<div><span>' + label + '</span><strong class="' + (cls || '') + '">' + value + '</strong></div>';
+    box.innerHTML = '<div class="est">'
+      + cell('Shares', num(e.quantity, 4).replace(/\.?0+$/, ''))
+      + cell('Invested', money(e.amountInvested))
+      + cell('Cash left', money(e.cashLeft))
+      + cell('Max loss', '–' + money(e.maxLoss) + ' (' + num(e.maxLossPercentOfCapital) + '% of capital)', 'loss')
+      + cell('Max profit', '+' + money(e.maxProfit) + ' (' + num(e.maxProfitPercentOfCapital) + '% of capital)', 'win')
+      + cell('Reward : risk', num(e.rewardRisk))
+      + cell('Stop distance', num(e.stopDistancePercent) + '% below entry')
+      + '</div>';
+  } catch (err) {
+    if (mine !== estimateSeq) return;
+    estimateQty = null;
+    box.innerHTML = '<p class="hint">' + esc(err.message) + '</p>';
+  }
+}
+
+['entryPrice', 'plannedStop', 'plannedExit'].forEach(n => $('tradeForm').elements[n].addEventListener('input', scheduleEstimate));
+$('capital').addEventListener('input', () => {
+  try { localStorage.setItem('swingJournal.capital', $('capital').value); } catch (e) {}
+  scheduleEstimate();
+});
+$('fractional').addEventListener('change', scheduleEstimate);
+$('useQty').addEventListener('click', () => {
+  if (estimateQty == null) { say('Fill in the entry, stop, target and capital first.'); return; }
+  $('tradeForm').elements.quantity.value = estimateQty;
+  say('Quantity set to ' + estimateQty + '. Save the trade to keep it.');
+});
+try { $('capital').value = localStorage.getItem('swingJournal.capital') || ''; } catch (e) {}
+
 /* ---------- trades ---------- */
 async function load() {
   const [list, s] = await Promise.all([api('/api/trades'), api('/api/stats')]);
@@ -276,6 +343,7 @@ function resetForm() {
   editingId = null;
   $('tradeForm').reset();
   renderSetupInfo(null);
+  scheduleEstimate();
   $('formTitle').textContent = 'Add a trade';
   $('saveBtn').textContent = 'Save trade';
 }
@@ -287,6 +355,7 @@ function startEdit(id) {
   const f = $('tradeForm');
   FIELDS.forEach(k => { f.elements[k].value = t[k] ?? ''; });
   renderSetupInfo(t.setupId, t.checklistDone);
+  scheduleEstimate();
   $('formTitle').textContent = 'Edit trade: ' + t.symbol;
   $('saveBtn').textContent = 'Save changes';
   $('formPanel').open = true;

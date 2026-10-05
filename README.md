@@ -17,6 +17,17 @@ Requires JDK 21+ and Maven.
 
 Open http://localhost:8080
 
+## Estimate: max loss and max profit
+
+In the Plan section, enter the entry, stop and target, then the **capital** you want to put into the trade.
+The app shows the number of shares (whole shares by default; tick "Allow fractional shares" to use the full amount),
+the amount invested, cash left, **max loss** and **max profit** in dollars and as a percent of your capital, and
+reward:risk. "Use this quantity" copies the share count into the trade. Your last capital value is remembered
+in the browser.
+
+Max loss assumes the stop fills exactly at the stop price. Gaps or fast moves can make the real loss bigger, and
+fees are not included. The same numbers are available at `GET /api/estimate?entry=&stop=&target=&capital=&fractional=`.
+
 ## Setups
 
 The **Setups library** is your chart playbook. It starts with four cards (Channel up, Ascending triangle,

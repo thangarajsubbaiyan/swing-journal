@@ -28,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.swingjournal.csv.TradeCsvImporter;
 import com.swingjournal.domain.ExitType;
 import com.swingjournal.domain.Outcome;
+import com.swingjournal.domain.PositionEstimate;
 import com.swingjournal.domain.Status;
 import com.swingjournal.domain.Trade;
 import com.swingjournal.domain.TradeMetrics;
@@ -167,6 +168,16 @@ public class TradeController {
                 : BigDecimal.valueOf(wins * 100L).divide(BigDecimal.valueOf(closed), 1, RoundingMode.HALF_UP);
         BigDecimal avgR = rCount == 0 ? null : rSum.divide(BigDecimal.valueOf(rCount), 2, RoundingMode.HALF_UP);
         return new Stats(all.size(), planned, open, closed, wins, losses, winRate, totalPl, avgR);
+    }
+
+    /** Position-size estimate: how much could be lost or made with this much capital. */
+    @GetMapping("/estimate")
+    public PositionEstimate estimate(@RequestParam("entry") BigDecimal entry,
+                                     @RequestParam("stop") BigDecimal stop,
+                                     @RequestParam("target") BigDecimal target,
+                                     @RequestParam("capital") BigDecimal capital,
+                                     @RequestParam(value = "fractional", defaultValue = "false") boolean fractional) {
+        return PositionEstimate.of(entry, stop, target, capital, fractional);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
