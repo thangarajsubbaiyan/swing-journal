@@ -5,35 +5,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Swing Journal</title>
 <style>
-  :root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --line:#dcdcd5; --card:#fff; --win:#16794c; --loss:#b3261e; --accent:#2a5bd7; }
+  :root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --line:#dcdcd5; --card:#fff; --win:#16794c; --loss:#b3261e; --accent:#2a5bd7; --danger:#b3261e; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#161616; --fg:#ececea; --muted:#9a9a94; --line:#333; --card:#1f1f1f; --win:#4cc38a; --loss:#ff7b72; --accent:#7aa2ff; }
+    :root { --bg:#161616; --fg:#ececea; --muted:#9a9a94; --line:#333; --card:#1f1f1f; --win:#4cc38a; --loss:#ff7b72; --accent:#7aa2ff; --danger:#ff7b72; }
   }
   * { box-sizing: border-box; }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,sans-serif; }
-  main { max-width:1100px; margin:0 auto; }
+  main { max-width:1200px; margin:0 auto; }
   h1 { font-size:22px; margin:8px 0 16px; }
+  h3 { margin:14px 0 0; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
   .stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
-  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; min-width:120px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; min-width:110px; }
   .stat b { display:block; font-size:20px; }
   .stat span { color:var(--muted); font-size:12px; }
   .panel { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:16px; }
   .panel summary { cursor:pointer; font-weight:600; }
   form.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:12px; }
   label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:3px; }
-  input, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
-  textarea { min-height:60px; resize:vertical; }
+  input, textarea, select { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  textarea { min-height:56px; resize:vertical; }
   .wide { grid-column:1/-1; }
+  .hint { color:var(--muted); font-size:12px; margin:0; }
   button { font:inherit; padding:7px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:6px; cursor:pointer; }
-  button.link { background:none; color:var(--accent); border:none; padding:0; text-decoration:underline; }
+  button.secondary { background:none; color:var(--accent); }
+  button.link { background:none; color:var(--accent); border:none; padding:0 6px 0 0; text-decoration:underline; }
+  button.link.danger { color:var(--danger); }
   .tablewrap { overflow-x:auto; }
-  table { border-collapse:collapse; width:100%; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  table { border-collapse:collapse; width:100%; background:var(--card); border:1px solid var(--line); }
   th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th { color:var(--muted); font-size:12px; font-weight:600; }
-  th:first-child, td:first-child { text-align:left; }
-  .win { color:var(--win); } .loss { color:var(--loss); } .open { color:var(--muted); }
+  th:first-child, td:first-child, th.l, td.l { text-align:left; }
+  .win { color:var(--win); } .loss { color:var(--loss); } .muted { color:var(--muted); }
+  .badge { display:inline-block; padding:1px 8px; border-radius:999px; border:1px solid var(--line); font-size:12px; }
+  .badge.PLANNED { color:var(--muted); } .badge.EXECUTED { color:var(--accent); border-color:var(--accent); } .badge.CLOSED { color:var(--fg); }
   #msg { margin:8px 0; min-height:1.4em; color:var(--muted); }
-  .notes { white-space:normal; text-align:left; font-size:13px; color:var(--muted); max-width:420px; }
 </style>
 </head>
 <body>
@@ -42,26 +47,42 @@
   <div class="stats" id="stats"></div>
   <div id="msg"></div>
 
-  <details class="panel">
-    <summary>Add a trade (plan)</summary>
-    <form class="grid" id="addForm">
+  <details class="panel" id="formPanel">
+    <summary id="formTitle">Add a trade</summary>
+    <form class="grid" id="tradeForm">
+      <h3 class="wide">1 · Plan</h3>
       <label>Symbol<input name="symbol" required></label>
       <label>Company<input name="companyName"></label>
-      <label>Trade date<input name="tradeDate" type="date" required></label>
       <label>Entry price<input name="entryPrice" type="number" step="any" min="0" required></label>
-      <label>Quantity<input name="quantity" type="number" step="any" min="0" required></label>
-      <label>Planned stop<input name="plannedStop" type="number" step="any" min="0" required></label>
-      <label>Planned exit<input name="plannedExit" type="number" step="any" min="0" required></label>
+      <label>Stop<input name="plannedStop" type="number" step="any" min="0" required></label>
+      <label>Target<input name="plannedExit" type="number" step="any" min="0" required></label>
       <label class="wide">Why enter?<textarea name="entryReason"></textarea></label>
       <label class="wide">Why this stop?<textarea name="stopReason"></textarea></label>
-      <label class="wide">Why this exit?<textarea name="exitReason"></textarea></label>
-      <div class="wide"><button type="submit">Save trade</button></div>
+      <label class="wide">Why this target?<textarea name="exitReason"></textarea></label>
+
+      <h3 class="wide">2 · Execute <span class="muted" style="text-transform:none;letter-spacing:0">(leave empty while only planning)</span></h3>
+      <label>Trade date<input name="tradeDate" type="date"></label>
+      <label>Quantity<input name="quantity" type="number" step="any" min="0"></label>
+      <p class="hint wide">If you got a different price than planned, change the entry price above to the actual fill.</p>
+
+      <h3 class="wide">3 · Result <span class="muted" style="text-transform:none;letter-spacing:0">(after the trade is done; profit or loss is worked out for you)</span></h3>
+      <label>Exit price<input name="exitPrice" type="number" step="any" min="0"></label>
+      <label>Exit date<input name="exitDate" type="date"></label>
+      <label>Exit type
+        <select name="exitType"><option value="">Auto</option><option>TARGET</option><option>STOP</option><option>MANUAL</option></select>
+      </label>
+      <label class="wide">How it went / lesson learned<textarea name="lesson"></textarea></label>
+
+      <div class="wide">
+        <button type="submit" id="saveBtn">Save trade</button>
+        <button type="button" class="secondary" id="cancelBtn">Cancel</button>
+      </div>
     </form>
   </details>
 
   <details class="panel">
     <summary>Import from CSV</summary>
-    <p style="color:var(--muted)">Use the CSV exported from your spreadsheet. Re-importing is safe; duplicates are skipped.</p>
+    <p class="hint" style="margin:8px 0">Use the CSV exported from your spreadsheet. Re-importing is safe; duplicates are skipped.</p>
     <input type="file" id="csvFile" accept=".csv,text/csv">
     <button id="importBtn" type="button">Import</button>
   </details>
@@ -69,8 +90,8 @@
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th>Symbol</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
-        <th>R:R</th><th>Risk %</th><th>Status</th><th>P/L</th><th>R</th><th></th>
+        <th>Symbol</th><th class="l">Phase</th><th>Date</th><th>Entry</th><th>Qty</th><th>Invested</th><th>Stop</th><th>Target</th>
+        <th>R:R</th><th>Risk %</th><th class="l">Result</th><th>P/L</th><th>R</th><th class="l">Actions</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -81,48 +102,83 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v, d = 2) => v == null ? '–' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
 const say = (t) => { $('msg').textContent = t; };
+const FIELDS = ['symbol','companyName','entryPrice','plannedStop','plannedExit','entryReason','stopReason','exitReason',
+                'tradeDate','quantity','exitPrice','exitDate','exitType','lesson'];
+let trades = [];
+let editingId = null;
 
 async function api(path, options) {
   const res = await fetch(path, options);
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json()).error || ''; } catch (e) {}
+    if (res.status === 409) detail = 'A trade with the same symbol, date and entry price already exists.';
     throw new Error(detail || ('Request failed (' + res.status + ')'));
   }
   return res.status === 204 ? null : res.json();
 }
+const post = (path, body, method = 'POST') => api(path, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
 
 async function load() {
-  const [trades, s] = await Promise.all([api('/api/trades'), api('/api/stats')]);
+  const [list, s] = await Promise.all([api('/api/trades'), api('/api/stats')]);
+  trades = list;
   $('stats').innerHTML = [
-    ['Trades', s.totalTrades], ['Open', s.openTrades], ['Closed', s.closedTrades],
+    ['Planned', s.plannedTrades], ['Open', s.openTrades], ['Closed', s.closedTrades],
     ['Win rate', s.winRatePercent == null ? '–' : num(s.winRatePercent, 1) + '%'],
     ['Total P/L', num(s.totalProfitLoss)], ['Avg R', s.averageR == null ? '–' : num(s.averageR)]
   ].map(([k, v]) => '<div class="stat"><b>' + esc(v) + '</b><span>' + k + '</span></div>').join('');
 
-  $('rows').innerHTML = trades.map(({trade: t, metrics: m}) => {
-    const cls = m.outcome === 'WIN' ? 'win' : m.outcome === 'LOSS' ? 'loss' : 'open';
-    const status = m.outcome === 'OPEN' ? 'Open' : esc(m.outcome) + (t.exitType ? ' (' + esc(t.exitType) + ')' : '');
+  $('rows').innerHTML = list.map(({trade: t, metrics: m}) => {
+    const cls = m.outcome === 'WIN' ? 'win' : m.outcome === 'LOSS' ? 'loss' : 'muted';
+    const result = m.status === 'CLOSED' ? esc(m.outcome) + (t.exitType ? ' (' + esc(t.exitType) + ')' : '') : '–';
     const title = [t.entryReason && 'Entry: ' + t.entryReason, t.stopReason && 'Stop: ' + t.stopReason,
-                   t.exitReason && 'Exit: ' + t.exitReason, t.lesson && 'Lesson: ' + t.lesson].filter(Boolean).join('\n');
-    return '<tr title="' + esc(title) + '"><td>' + esc(t.symbol) + (t.companyName ? ' <span class="open">' + esc(t.companyName) + '</span>' : '') + '</td>'
-      + '<td>' + esc(t.tradeDate) + '</td><td>' + num(t.entryPrice) + '</td><td>' + num(t.quantity, 4).replace(/\.?0+$/, '') + '</td>'
+                   t.exitReason && 'Target: ' + t.exitReason, t.lesson && 'Lesson: ' + t.lesson].filter(Boolean).join('\n');
+    const actions = '<button class="link" data-act="edit" data-id="' + t.id + '">Edit</button>'
+      + (m.status === 'PLANNED' ? '<button class="link" data-act="execute" data-id="' + t.id + '">Execute</button>' : '')
+      + (m.status === 'EXECUTED' ? '<button class="link" data-act="close" data-id="' + t.id + '">Close</button>' : '')
+      + '<button class="link danger" data-act="delete" data-id="' + t.id + '">Delete</button>';
+    return '<tr title="' + esc(title) + '"><td>' + esc(t.symbol) + (t.companyName ? ' <span class="muted">' + esc(t.companyName) + '</span>' : '') + '</td>'
+      + '<td class="l"><span class="badge ' + esc(m.status) + '">' + esc(m.status.charAt(0) + m.status.slice(1).toLowerCase()) + '</span></td>'
+      + '<td>' + (t.tradeDate ? esc(t.tradeDate) : '–') + '</td><td>' + num(t.entryPrice) + '</td>'
+      + '<td>' + (t.quantity == null ? '–' : num(t.quantity, 4).replace(/\.?0+$/, '')) + '</td>'
       + '<td>' + num(m.amountInvested) + '</td><td>' + num(t.plannedStop) + '</td><td>' + num(t.plannedExit) + '</td>'
       + '<td>' + num(m.rewardRisk) + '</td><td>' + num(m.riskPercent, 1) + '</td>'
-      + '<td class="' + cls + '">' + status + '</td><td class="' + cls + '">' + num(m.profitLoss) + '</td><td>' + num(m.rMultiple) + '</td>'
-      + '<td>' + (t.exitPrice == null ? '<button class="link" data-close="' + t.id + '">Close</button>' : '') + '</td></tr>';
-  }).join('') || '<tr><td colspan="13" class="open">No trades yet. Add one or import your CSV.</td></tr>';
+      + '<td class="l ' + cls + '">' + result + '</td><td class="' + cls + '">' + num(m.profitLoss) + '</td><td>' + num(m.rMultiple) + '</td>'
+      + '<td class="l">' + actions + '</td></tr>';
+  }).join('') || '<tr><td colspan="14" class="muted">No trades yet. Plan one above or import your CSV.</td></tr>';
 }
 
-$('addForm').addEventListener('submit', async (e) => {
+function resetForm() {
+  editingId = null;
+  $('tradeForm').reset();
+  $('formTitle').textContent = 'Add a trade';
+  $('saveBtn').textContent = 'Save trade';
+}
+
+function startEdit(id) {
+  const t = trades.find(x => x.trade.id === id)?.trade;
+  if (!t) return;
+  editingId = id;
+  const f = $('tradeForm');
+  FIELDS.forEach(k => { f.elements[k].value = t[k] ?? ''; });
+  $('formTitle').textContent = 'Edit trade: ' + t.symbol;
+  $('saveBtn').textContent = 'Save changes';
+  $('formPanel').open = true;
+  $('formPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+$('tradeForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const f = Object.fromEntries(new FormData(e.target).entries());
-  ['entryReason', 'stopReason', 'exitReason', 'companyName'].forEach(k => { if (!f[k]) f[k] = null; });
+  const body = {};
+  FIELDS.forEach(k => { const v = e.target.elements[k].value.trim(); body[k] = v === '' ? null : v; });
   try {
-    await api('/api/trades', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(f)});
-    e.target.reset(); say('Trade saved.'); await load();
+    if (editingId == null) await post('/api/trades', body);
+    else await post('/api/trades/' + editingId, body, 'PUT');
+    say(editingId == null ? 'Trade saved.' : 'Changes saved.');
+    resetForm(); await load();
   } catch (err) { say(err.message); }
 });
+$('cancelBtn').addEventListener('click', () => { resetForm(); $('formPanel').open = false; });
 
 $('importBtn').addEventListener('click', async () => {
   const file = $('csvFile').files[0];
@@ -136,17 +192,33 @@ $('importBtn').addEventListener('click', async () => {
 });
 
 $('rows').addEventListener('click', async (e) => {
-  const id = e.target.dataset.close;
-  if (!id) return;
-  const price = prompt('Exit price?');
-  if (!price) return;
-  const date = prompt('Exit date (YYYY-MM-DD)?', new Date().toISOString().slice(0, 10));
-  if (!date) return;
-  const lesson = prompt('Lesson learned (optional)?') || null;
+  const act = e.target.dataset.act;
+  if (!act) return;
+  const id = Number(e.target.dataset.id);
+  const t = trades.find(x => x.trade.id === id)?.trade;
+  if (!t) return;
+  const today = new Date().toISOString().slice(0, 10);
   try {
-    await api('/api/trades/' + id + '/close', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({exitPrice: price, exitDate: date, lesson})});
-    say('Trade closed.'); await load();
+    if (act === 'edit') { startEdit(id); return; }
+    if (act === 'delete') {
+      if (!confirm('Delete ' + t.symbol + '? This cannot be undone.')) return;
+      await api('/api/trades/' + id, {method: 'DELETE'});
+      if (editingId === id) resetForm();
+      say('Deleted.');
+    } else if (act === 'execute') {
+      const tradeDate = prompt('Trade date (YYYY-MM-DD)?', today); if (!tradeDate) return;
+      const entryPrice = prompt('Actual entry price?', t.entryPrice); if (!entryPrice) return;
+      const quantity = prompt('Quantity?', t.quantity ?? ''); if (!quantity) return;
+      await post('/api/trades/' + id + '/execute', {tradeDate, entryPrice, quantity});
+      say('Trade executed.');
+    } else if (act === 'close') {
+      const exitPrice = prompt('Exit price?'); if (!exitPrice) return;
+      const exitDate = prompt('Exit date (YYYY-MM-DD)?', today); if (!exitDate) return;
+      const lesson = prompt('How it went / lesson learned (optional)?') || null;
+      await post('/api/trades/' + id + '/close', {exitPrice, exitDate, lesson});
+      say('Trade closed.');
+    }
+    await load();
   } catch (err) { say(err.message); }
 });
 

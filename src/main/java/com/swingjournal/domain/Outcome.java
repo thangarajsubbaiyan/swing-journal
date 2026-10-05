@@ -1,3 +1,4 @@
 package com.swingjournal.domain;
 
-public enum Outcome { OPEN, WIN, LOSS, BREAKEVEN }
+/** Result of a closed trade. PENDING means there is no result yet. */
+public enum Outcome { PENDING, WIN, LOSS, BREAKEVEN }

@@ -17,8 +17,8 @@ import com.swingjournal.domain.Trade;
 
 /**
  * Reads the CSV exported from the old "Swing trade" spreadsheet.
- * Required: Symbol, Trade date, Entry price, Quantity, Planned Stop loss, Planned Exit price.
- * Everything else is optional. Derived columns (Amount invested, Risk/Reward ratio, Profit/Loss,
+ * Required: Symbol, Entry price, Planned Stop loss, Planned Exit price.
+ * Everything else is optional; a row without a trade date or quantity is imported as a planned trade. Derived columns (Amount invested, Risk/Reward ratio, Profit/Loss,
  * Success/Failure) and the duplicate "Strategy" column are ignored; the app recalculates them.
  */
 public final class TradeCsvImporter {
@@ -47,8 +47,7 @@ public final class TradeCsvImporter {
         for (int i = 0; i < header.size(); i++) {
             col.put(normalize(header.get(i)), i);
         }
-        for (String required : List.of("symbol", "trade date", "entry price", "quantity",
-                "planned stop loss", "planned exit price")) {
+        for (String required : List.of("symbol", "entry price", "planned stop loss", "planned exit price")) {
             if (!col.containsKey(required)) {
                 errors.add("Missing required column: " + required);
             }
@@ -103,8 +102,8 @@ public final class TradeCsvImporter {
         }
 
         return new Trade(null, symbol.toUpperCase(Locale.ROOT), company,
-                requiredDate(row, col, "trade date"), entry,
-                requiredNumber(row, col, "quantity"),
+                date(row, col, "trade date"), entry,
+                number(row, col, "quantity"),
                 text(row, col, "entry price strategy"),
                 requiredNumber(row, col, "planned stop loss"),
                 text(row, col, "stop loss strategy"),
@@ -159,11 +158,4 @@ public final class TradeCsvImporter {
         }
     }
 
-    private static LocalDate requiredDate(List<String> row, Map<String, Integer> col, String name) {
-        LocalDate v = date(row, col, name);
-        if (v == null) {
-            throw new IllegalArgumentException("'" + name + "' is required");
-        }
-        return v;
-    }
 }

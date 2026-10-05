@@ -1,7 +1,13 @@
 # Swing Journal
 
-A personal swing-trade journal. Plan each trade (entry, stop, target and the reasons), close it later,
-and let the app calculate amount invested, risk/reward, risk %, P/L and R-multiple.
+A personal swing-trade journal. Each trade moves through three phases, and you can edit it at any point:
+
+1. **Plan** – symbol, entry, stop, target and the reasons. No date or quantity needed.
+2. **Execute** – add the trade date and quantity (and the actual entry price if it differed).
+3. **Result** – exit price and date, plus how it went. Profit or loss, risk/reward, risk % and R-multiple
+   are calculated for you.
+
+A planned trade doesn't have to be executed. Delete it if you decide to skip it.
 
 ## Run
 
@@ -23,11 +29,17 @@ Use the page's "Import from CSV" box, or:
 
     curl -F file=@Swing_trade.csv http://localhost:8080/api/import
 
-Required columns: Symbol, Trade date, Entry price, Quantity, Planned Stop loss, Planned Exit price.
-Everything else is optional. Amount invested, Risk/Reward ratio, Profit/Loss, Success/Failure and the
+Required columns: Symbol, Entry price, Planned Stop loss, Planned Exit price.
+Everything else is optional; a row without a trade date or quantity is imported as a planned trade. Amount invested, Risk/Reward ratio, Profit/Loss, Success/Failure and the
 duplicate Strategy column are ignored because the app recalculates them. Re-importing skips duplicates
 (same symbol, date and entry price).
 
-## Scope of version 0.1
+## Upgrading from 0.1
+
+The first start of this version rebuilds the `trade` table so trade date and quantity can be empty.
+All existing rows are kept (the change is all-or-nothing). Copy `~/swing-journal/journal.db` somewhere first
+if you want a backup.
+
+## Scope
 
 Long trades only. No accounts, no charts, no live prices.

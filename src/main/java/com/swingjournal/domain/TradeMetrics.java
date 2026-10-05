@@ -3,8 +3,12 @@ package com.swingjournal.domain;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-/** Values calculated from a {@link Trade}; never typed in by hand. */
+/**
+ * Values calculated from a {@link Trade}; never typed in by hand.
+ * Anything that needs a quantity is null until the trade has one.
+ */
 public record TradeMetrics(
+        Status status,
         BigDecimal amountInvested,
         BigDecimal riskPerShare,
         BigDecimal riskAmount,
@@ -17,9 +21,11 @@ public record TradeMetrics(
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     public static TradeMetrics of(Trade t) {
-        BigDecimal invested = t.entryPrice().multiply(t.quantity());
+        BigDecimal qty = t.quantity();
         BigDecimal riskPerShare = t.entryPrice().subtract(t.plannedStop());
-        BigDecimal riskAmount = riskPerShare.multiply(t.quantity());
+
+        BigDecimal invested = qty == null ? null : scale2(t.entryPrice().multiply(qty));
+        BigDecimal riskAmount = qty == null ? null : scale2(riskPerShare.multiply(qty));
 
         BigDecimal riskPercent = null;
         BigDecimal rewardRisk = null;
@@ -29,18 +35,25 @@ public record TradeMetrics(
                     .divide(riskPerShare, 2, RoundingMode.HALF_UP);
         }
 
+        Status status = t.isClosed() ? Status.CLOSED : t.isExecuted() ? Status.EXECUTED : Status.PLANNED;
         BigDecimal pl = null;
         BigDecimal r = null;
-        Outcome outcome = Outcome.OPEN;
+        Outcome outcome = Outcome.PENDING;
         if (t.isClosed()) {
-            BigDecimal rawPl = t.exitPrice().subtract(t.entryPrice()).multiply(t.quantity());
-            pl = rawPl.setScale(2, RoundingMode.HALF_UP);
-            if (riskAmount.signum() > 0) {
-                r = rawPl.divide(riskAmount, 2, RoundingMode.HALF_UP);
+            BigDecimal movePerShare = t.exitPrice().subtract(t.entryPrice());
+            if (qty != null) {
+                pl = scale2(movePerShare.multiply(qty));
             }
-            outcome = pl.signum() > 0 ? Outcome.WIN : pl.signum() < 0 ? Outcome.LOSS : Outcome.BREAKEVEN;
+            if (riskPerShare.signum() > 0) {
+                r = movePerShare.divide(riskPerShare, 2, RoundingMode.HALF_UP);
+            }
+            outcome = movePerShare.signum() > 0 ? Outcome.WIN
+                    : movePerShare.signum() < 0 ? Outcome.LOSS : Outcome.BREAKEVEN;
         }
-        return new TradeMetrics(invested.setScale(2, RoundingMode.HALF_UP), riskPerShare, 
-                riskAmount.setScale(2, RoundingMode.HALF_UP), riskPercent, rewardRisk, pl, r, outcome);
+        return new TradeMetrics(status, invested, riskPerShare, riskAmount, riskPercent, rewardRisk, pl, r, outcome);
+    }
+
+    private static BigDecimal scale2(BigDecimal v) {
+        return v.setScale(2, RoundingMode.HALF_UP);
     }
 }

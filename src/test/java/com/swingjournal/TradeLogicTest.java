@@ -2,6 +2,7 @@ package com.swingjournal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -12,8 +13,10 @@ import org.junit.jupiter.api.Test;
 import com.swingjournal.csv.TradeCsvImporter;
 import com.swingjournal.domain.ExitType;
 import com.swingjournal.domain.Outcome;
+import com.swingjournal.domain.Status;
 import com.swingjournal.domain.Trade;
 import com.swingjournal.domain.TradeMetrics;
+import com.swingjournal.domain.TradeValidator;
 
 class TradeLogicTest {
 
@@ -21,16 +24,52 @@ class TradeLogicTest {
             + "Planned Stop loss,Stop loss Strategy,Risk/Reward ratio,Executed Stop loss price,Stop loss executed date,"
             + "Planned Exit price,Exit price Strategy,Executed exit price,Profit/Loss,Exit date,Success/Failure,Strategy,Lesson learned\n";
 
+    private static Trade planned() {
+        return new Trade(null, "TT", null, null, new BigDecimal("331.85"), null, null,
+                new BigDecimal("318.75"), null, new BigDecimal("358.86"), null, null, null, null, null);
+    }
+
     @Test
-    void openTradeCalculatesPlanMetrics() {
-        Trade t = new Trade(null, "TT", null, LocalDate.of(2024, 6, 27), new BigDecimal("331.85"), BigDecimal.ONE,
-                null, new BigDecimal("318.75"), null, new BigDecimal("358.86"), null, null, null, null, null);
+    void plannedTradeNeedsNoDateOrQuantity() {
+        Trade t = planned();
+        TradeValidator.validate(t);
         TradeMetrics m = TradeMetrics.of(t);
-        assertEquals(new BigDecimal("331.85"), m.amountInvested());
+        assertEquals(Status.PLANNED, m.status());
         assertEquals(new BigDecimal("2.06"), m.rewardRisk());
         assertEquals(new BigDecimal("3.9"), m.riskPercent());
-        assertEquals(Outcome.OPEN, m.outcome());
-        assertNull(m.profitLoss());
+        assertNull(m.amountInvested());
+        assertEquals(Outcome.PENDING, m.outcome());
+    }
+
+    @Test
+    void planThenExecuteThenClose() {
+        Trade executed = planned().withExecution(LocalDate.of(2024, 6, 27), new BigDecimal("332.00"), BigDecimal.TEN);
+        TradeValidator.validate(executed);
+        assertEquals(Status.EXECUTED, TradeMetrics.of(executed).status());
+        assertEquals(new BigDecimal("3320.00"), TradeMetrics.of(executed).amountInvested());
+
+        Trade closed = executed.withResult(new BigDecimal("358.86"), LocalDate.of(2024, 7, 10), null, "Held to target")
+                .withDefaultExitType();
+        TradeValidator.validate(closed);
+        TradeMetrics m = TradeMetrics.of(closed);
+        assertEquals(Status.CLOSED, m.status());
+        assertEquals(Outcome.WIN, m.outcome());
+        assertEquals(ExitType.TARGET, closed.exitType());
+        assertEquals(new BigDecimal("268.60"), m.profitLoss());
+        assertEquals("Held to target", closed.lesson());
+    }
+
+    @Test
+    void validatorEnforcesPhaseRules() {
+        Trade datedWithoutQty = planned().withExecution(LocalDate.of(2024, 6, 27), null, null);
+        assertThrows(IllegalArgumentException.class, () -> TradeValidator.validate(datedWithoutQty));
+
+        Trade resultWithoutExecution = planned().withResult(new BigDecimal("340"), LocalDate.of(2024, 7, 1), null, null);
+        assertThrows(IllegalArgumentException.class, () -> TradeValidator.validate(resultWithoutExecution));
+
+        Trade executed = planned().withExecution(LocalDate.of(2024, 6, 27), null, BigDecimal.ONE);
+        Trade exitBeforeEntry = executed.withResult(new BigDecimal("340"), LocalDate.of(2024, 6, 1), null, null);
+        assertThrows(IllegalArgumentException.class, () -> TradeValidator.validate(exitBeforeEntry));
     }
 
     @Test
@@ -46,10 +85,18 @@ class TradeLogicTest {
         assertEquals(LocalDate.of(2024, 6, 25), t.tradeDate());
         assertEquals(ExitType.STOP, t.exitType());
         assertEquals(LocalDate.of(2024, 7, 2), t.exitDate());
+        TradeValidator.validate(t);
         TradeMetrics m = TradeMetrics.of(t);
         assertEquals(Outcome.LOSS, m.outcome());
         assertEquals(new BigDecimal("-3.29"), m.profitLoss());
         assertEquals(new BigDecimal("-1.00"), m.rMultiple());
+    }
+
+    @Test
+    void csvRowWithoutDateOrQuantityImportsAsPlanned() {
+        var result = TradeCsvImporter.parse("Symbol,Entry price,Planned Stop loss,Planned Exit price\nSAP,205.82,195,236\n");
+        assertTrue(result.errors().isEmpty(), result.errors().toString());
+        assertEquals(Status.PLANNED, TradeMetrics.of(result.trades().get(0)).status());
     }
 
     @Test
